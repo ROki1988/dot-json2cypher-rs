@@ -6,6 +6,23 @@ use std::collections::HashMap;
 use std::fmt::Write;
 
 #[derive(Debug, Deserialize)]
+struct Attributes(HashMap<String, Value>);
+
+impl Attributes {
+    fn to_string_vec(&self) -> Vec<String> {
+        self.0
+            .iter()
+            .filter_map(|(key, value)| match value {
+                Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+                    Some(format!("{}: {}", key, value))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    }
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct Graph {
     name: String,
     objects: Vec<Object>,
@@ -31,7 +48,11 @@ impl Graph {
                 .get(&edge.head)
                 .ok_or_else(|| anyhow!("invalid node id: {}", edge.head))?;
 
-            writeln!(buff, r#"CREATE ({}) -[ :EDGE {{}} ]-> ({})"#, tail.name, head.name)?;
+            writeln!(
+                buff,
+                r#"CREATE ({}) -[ :EDGE {{ {} }} ]-> ({})"#,
+                tail.name, edge.attributes.to_string_vec().join(","),head.name
+            )?;
         }
 
         Ok(buff)
@@ -44,25 +65,20 @@ pub(crate) struct Object {
     name: String,
     label: String,
     #[serde(flatten)]
-    attributes: HashMap<String, Value>,
+    attributes: Attributes,
 }
 
 impl Object {
     fn to_cypher_string(&self) -> String {
-        let mut labels = HashMap::new();
-        let v = Value::String(self.label.clone());
-        labels.insert("label", &v);
-        labels.extend(self.attributes.iter().map(|x| (x.0.as_str(), x.1)));
+        let mut l = self.attributes.to_string_vec();
+        let v = format!("label: {}", Value::String(self.label.to_string()));
+        l.push(v);
 
-        let l: Vec<String> = labels
-            .iter()
-            .filter_map(|(key, value)| match value {
-                Value::Bool(_) | Value::Number(_) | Value::String(_) => Some(format!("{}: {}", key, value)),
-                _ => None,
-            })
-            .collect();
-
-        format!(r#"CREATE ({}:Object {{ {} }}) "#, self.name, l.join(", "))
+        format!(
+            r#"CREATE ({}:Object {{ {} }}) "#,
+            self.name,
+            l.join(", ")
+        )
     }
 }
 
@@ -73,5 +89,5 @@ pub(crate) struct Edge {
     head: u32,
 
     #[serde(flatten)]
-    attributes: HashMap<String, Value>,
+    attributes: Attributes,
 }
