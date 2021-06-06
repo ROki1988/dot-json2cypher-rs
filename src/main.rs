@@ -3,7 +3,6 @@ use std::io::Read;
 
 use crate::graph::Graph;
 use anyhow::Result;
-use serde_json;
 
 mod graph;
 
